@@ -1,0 +1,30 @@
+# Environnements virtuels
+venv/
+env/
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.npm/
+
+# Base de données
+*.sqlite3
+*.db
+backend/app.db
+
+# ChromaDB
+backend/chroma_db/
+
+# IDE et OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
