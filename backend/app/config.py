@@ -19,7 +19,7 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 # --- Paramètres RAG ---
-EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
 TOP_K_RESULTS = 5

@@ -12,7 +12,7 @@ niveau uniquement, jamais de diagnostic. S'il ne sait pas, il doit le dire
 et orienter vers un professionnel de santé.
 """
 from langchain_groq import ChatGroq
-from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain.agents import create_tool_calling_agent, AgentExecutor
@@ -27,7 +27,6 @@ from app.config import (
     CHROMA_PERSIST_DIR,
     COLLECTION_NAME,
     TOP_K_RESULTS,
-    HF_TOKEN,
 )
 
 SYSTEM_PROMPT = """Cet agent est un assistant d'orientation médicale et de prévention pour le Burkina Faso.
@@ -57,10 +56,7 @@ _retriever = None
 def _load_retriever():
     global _retriever
     if _retriever is None:
-        embeddings = HuggingFaceInferenceAPIEmbeddings(
-            api_key=HF_TOKEN,
-            model_name=EMBEDDING_MODEL
-        )
+        embeddings = FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
         vector_store = Chroma(
             collection_name=COLLECTION_NAME,
             embedding_function=embeddings,
