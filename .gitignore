@@ -20,8 +20,8 @@ build/
 *.db
 backend/app.db
 
-# ChromaDB
-backend/chroma_db/
+# ChromaDB (Autorisé pour le déploiement)
+# backend/chroma_db/
 
 # IDE et OS
 .vscode/
