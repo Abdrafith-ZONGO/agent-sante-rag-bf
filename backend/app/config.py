@@ -17,7 +17,7 @@ CHROMA_PERSIST_DIR = BASE_DIR / "chroma_db"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-
+HF_TOKEN = os.getenv("HF_TOKEN", "")
 # --- Paramètres RAG ---
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CHUNK_SIZE = 800
