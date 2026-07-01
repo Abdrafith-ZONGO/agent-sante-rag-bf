@@ -102,7 +102,7 @@ rsa==4.9.1
 safetensors==0.8.0
 scikit-learn==1.9.0
 scipy==1.17.1
-sentence-transformers==3.3.1
+fastembed
 setuptools==81.0.0
 shellingham==1.5.4
 six==1.17.0
@@ -115,8 +115,7 @@ tenacity==9.1.4
 threadpoolctl==3.6.0
 tiktoken==0.13.0
 tokenizers==0.22.2
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.12.1+cpu
+
 tqdm==4.68.3
 transformers==4.57.6
 typer==0.25.1

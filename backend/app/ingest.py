@@ -17,7 +17,7 @@ from pathlib import Path
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_chroma import Chroma
 
 from app.config import (
@@ -66,7 +66,7 @@ def split_documents(documents):
 def build_vector_store(chunks):
     """Génère les embeddings et les sauvegarde dans ChromaDB (persistant sur disque)."""
     print(f"[INFO] Chargement du modèle d'embeddings : {EMBEDDING_MODEL} (téléchargement la 1ère fois)...")
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    embeddings = FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
 
     print("[INFO] Création de la base vectorielle ChromaDB...")
     vector_store = Chroma.from_documents(
