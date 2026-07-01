@@ -16,12 +16,11 @@ build/
 .npm/
 
 # Base de données
-*.sqlite3
 *.db
 backend/app.db
 
 # ChromaDB (Autorisé pour le déploiement)
-# backend/chroma_db/
+!backend/chroma_db/
 
 # IDE et OS
 .vscode/

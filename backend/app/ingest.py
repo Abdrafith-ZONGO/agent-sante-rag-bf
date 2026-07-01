@@ -17,7 +17,7 @@ from pathlib import Path
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_chroma import Chroma
 
 from app.config import (
@@ -27,6 +27,7 @@ from app.config import (
     CHUNK_SIZE,
     CHUNK_OVERLAP,
     COLLECTION_NAME,
+    GEMINI_API_KEY,
 )
 
 
@@ -65,16 +66,30 @@ def split_documents(documents):
 
 def build_vector_store(chunks):
     """Génère les embeddings et les sauvegarde dans ChromaDB (persistant sur disque)."""
-    print(f"[INFO] Chargement du modèle d'embeddings : {EMBEDDING_MODEL} (téléchargement la 1ère fois)...")
-    embeddings = FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
+    print(f"[INFO] Chargement du modèle d'embeddings : {EMBEDDING_MODEL} via Google Gemini API...")
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model=EMBEDDING_MODEL,
+        google_api_key=GEMINI_API_KEY
+    )
 
     print("[INFO] Création de la base vectorielle ChromaDB...")
-    vector_store = Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
+    vector_store = Chroma(
         collection_name=COLLECTION_NAME,
+        embedding_function=embeddings,
         persist_directory=str(CHROMA_PERSIST_DIR),
     )
+
+    # Insertion par lots pour respecter la limite API gratuite (100 requêtes/min)
+    import time
+    batch_size = 50
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i+batch_size]
+        print(f"[INFO] Insertion lot {i//batch_size + 1}/{(len(chunks)-1)//batch_size + 1}...")
+        vector_store.add_documents(batch)
+        if i + batch_size < len(chunks):
+            print("[ATTENTE] Pause de 40 secondes pour l'API Google...")
+            time.sleep(40)
+
     print(f"[SUCCES] Base vectorielle sauvegardée dans {CHROMA_PERSIST_DIR}")
     return vector_store
 

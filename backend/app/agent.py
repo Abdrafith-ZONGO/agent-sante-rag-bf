@@ -12,7 +12,7 @@ niveau uniquement, jamais de diagnostic. S'il ne sait pas, il doit le dire
 et orienter vers un professionnel de santé.
 """
 from langchain_groq import ChatGroq
-from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain.agents import create_tool_calling_agent, AgentExecutor
@@ -27,7 +27,7 @@ from app.config import (
     CHROMA_PERSIST_DIR,
     COLLECTION_NAME,
     TOP_K_RESULTS,
-    HF_TOKEN,
+    GEMINI_API_KEY,
 )
 
 SYSTEM_PROMPT = """Cet agent est un assistant d'orientation médicale et de prévention pour le Burkina Faso.
@@ -57,9 +57,9 @@ _retriever = None
 def _load_retriever():
     global _retriever
     if _retriever is None:
-        embeddings = HuggingFaceInferenceAPIEmbeddings(
-            api_key=HF_TOKEN,
-            model_name=EMBEDDING_MODEL
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model=EMBEDDING_MODEL,
+            google_api_key=GEMINI_API_KEY
         )
         vector_store = Chroma(
             collection_name=COLLECTION_NAME,
@@ -80,10 +80,8 @@ def build_agent_executor(use_web_search: bool = True) -> AgentExecutor:
 
     @tool
     def search_knowledge_base(query: str) -> str:
-        """Cherche dans la base documentaire officielle (OMS, PNLP, Ministère de la
-        Santé) des informations sur la prévention du paludisme, de la dengue,
-        la nutrition, ou les démarches sanitaires. À utiliser en priorité pour
-        toute question de prévention ou d'information générale de santé."""
+        """Cherche dans la base documentaire officielle (OMS, PNLP, Ministère de la Santé).
+        À utiliser pour retrouver des recommandations médicales officielles issues de nos documents locaux."""
         docs = retriever.invoke(query)
         if not docs:
             return "Aucun résultat trouvé dans la base documentaire interne."
@@ -97,10 +95,9 @@ def build_agent_executor(use_web_search: bool = True) -> AgentExecutor:
         max_results=4,
         api_key=TAVILY_API_KEY,
         description=(
-            "Cherche sur le web des informations récentes ou changeantes : "
-            "actualité sanitaire, alertes épidémiques en cours, informations "
-            "non couvertes par la base documentaire interne. À utiliser seulement "
-            "si search_knowledge_base ne suffit pas."
+            "Cherche sur le web mondial en direct. "
+            "Si cet outil est disponible, tu DOIS l'utiliser en ABSOLUE PRIORITÉ pour "
+            "aller chercher l'information sur internet avant de regarder la base documentaire locale."
         ),
     )
 
