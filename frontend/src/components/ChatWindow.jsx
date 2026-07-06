@@ -95,6 +95,12 @@ export default function ChatWindow() {
       const res = await fetch(`${API_URL}/sessions`, {
         headers: { Authorization: `Bearer ${token}` }
       })
+      if (res.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('username')
+        window.location.href = '/login'
+        return
+      }
       if (res.ok) {
         const data = await res.json()
         setSessions(data)
@@ -112,6 +118,12 @@ export default function ChatWindow() {
       const res = await fetch(`${API_URL}/sessions/${sessionId}/messages`, {
         headers: { Authorization: `Bearer ${token}` }
       })
+      if (res.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('username')
+        window.location.href = '/login'
+        return
+      }
       if (res.ok) {
         const data = await res.json()
         const formatted = data.map(m => ({
@@ -152,6 +164,12 @@ export default function ChatWindow() {
           },
           body: JSON.stringify({ title: text.substring(0, 40) + (text.length > 40 ? '...' : '') })
         })
+        if (sessRes.status === 401) {
+          localStorage.removeItem('token')
+          localStorage.removeItem('username')
+          window.location.href = '/login'
+          return
+        }
         const sessData = await sessRes.json()
         currentSessionId = sessData.id
         setActiveSessionId(currentSessionId)
@@ -170,6 +188,13 @@ export default function ChatWindow() {
           use_web_search: useWebSearch
         }),
       })
+
+      if (res.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('username')
+        window.location.href = '/login'
+        return
+      }
 
       if (!res.ok) {
         // Extraire le message d'erreur propre du backend
