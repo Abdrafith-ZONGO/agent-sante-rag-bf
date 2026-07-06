@@ -46,6 +46,7 @@ langchain-community==0.3.7
 langchain-core==0.3.63
 langchain-groq==0.2.1
 langchain-google-genai==2.0.5
+sentence-transformers>=2.7.0
 
 langchain-text-splitters==0.3.8
 langsmith==0.1.147

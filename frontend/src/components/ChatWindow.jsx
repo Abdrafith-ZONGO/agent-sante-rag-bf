@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import MessageBubble from './MessageBubble'
-import { PlusCircle, MessageSquare, Globe, Book, LogOut, Menu, X, FileText } from 'lucide-react'
+import { PlusCircle, MessageSquare, Globe, Book, LogOut, Menu, X, AlertTriangle, Clock } from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -10,6 +10,45 @@ const SUGGESTIONS = [
   "Quels aliments privilégier pour un enfant en bas âge ?",
 ]
 
+// Composant Toast d'erreur (affiché au-dessus du champ de saisie, pas dans le chat)
+function ErrorToast({ message, onClose }) {
+  const [exiting, setExiting] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setExiting(true)
+      setTimeout(onClose, 200)
+    }, 8000) // Auto-fermeture après 8s
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div
+      className={`mx-4 mb-3 max-w-3xl mx-auto ${exiting ? 'toast-exit' : 'toast-enter'}`}
+      style={{ maxWidth: '48rem', margin: '0 auto 12px auto', padding: '0 16px' }}
+    >
+      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl px-4 py-3 shadow-sm">
+        <AlertTriangle size={18} className="text-amber-500 mt-0.5 shrink-0" />
+        <div className="flex-1 text-sm leading-relaxed">
+          {/* Rendre le markdown du message d'erreur lisible */}
+          {message.split('\n').map((line, i) => (
+            <p key={i} className={i > 0 ? 'mt-1' : ''}>
+              {line.replace(/\*\*(.*?)\*\*/g, '$1')}
+            </p>
+          ))}
+        </div>
+        <button
+          onClick={() => { setExiting(true); setTimeout(onClose, 200) }}
+          className="text-amber-400 hover:text-amber-600 transition-colors shrink-0 mt-0.5"
+          aria-label="Fermer"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ChatWindow() {
   const [sessions, setSessions] = useState([])
   const [activeSessionId, setActiveSessionId] = useState(null)
@@ -17,15 +56,26 @@ export default function ChatWindow() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [useWebSearch, setUseWebSearch] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Sur mobile : sidebar fermée par défaut pour ne pas prendre tout l'écran
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768)
   const [showLogout, setShowLogout] = useState(false)
+  const [errorToast, setErrorToast] = useState(null) // { message: string } | null
   const bottomRef = useRef(null)
 
   const token = localStorage.getItem('token')
   const username = localStorage.getItem('username') || 'Utilisateur'
 
+  const dismissToast = useCallback(() => setErrorToast(null), [])
+
   useEffect(() => {
     fetchSessions()
+    // Fermer la sidebar si on resize vers mobile
+    const handleResize = () => {
+      if (window.innerWidth < 768) setSidebarOpen(false)
+      else setSidebarOpen(true)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   useEffect(() => {
@@ -64,11 +114,10 @@ export default function ChatWindow() {
       })
       if (res.ok) {
         const data = await res.json()
-        // Format to match old state
         const formatted = data.map(m => ({
           role: m.role === 'user' ? 'user' : 'assistant',
           content: m.content,
-          sources: [] // Sources aren't stored in DB in this simple version, but could be
+          sources: []
         }))
         setMessages(formatted)
       }
@@ -80,6 +129,7 @@ export default function ChatWindow() {
   async function startNewSession() {
     setActiveSessionId(null)
     setMessages([])
+    setErrorToast(null)
     if (window.innerWidth < 768) setSidebarOpen(false)
   }
 
@@ -88,29 +138,29 @@ export default function ChatWindow() {
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setLoading(true)
+    setErrorToast(null) // Effacer les anciens toasts
 
     let currentSessionId = activeSessionId
 
     try {
       if (!currentSessionId) {
-        // Create session
         const sessRes = await fetch(`${API_URL}/sessions`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}` 
+            Authorization: `Bearer ${token}`
           },
-          body: JSON.stringify({ title: text.substring(0, 30) + "..." })
+          body: JSON.stringify({ title: text.substring(0, 40) + (text.length > 40 ? '...' : '') })
         })
         const sessData = await sessRes.json()
         currentSessionId = sessData.id
         setActiveSessionId(currentSessionId)
-        fetchSessions() // Update sidebar
+        fetchSessions()
       }
 
       const res = await fetch(`${API_URL}/chat`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
@@ -122,28 +172,30 @@ export default function ChatWindow() {
       })
 
       if (!res.ok) {
-        let errorDetail = `Erreur serveur (${res.status})`
+        // Extraire le message d'erreur propre du backend
+        let friendlyMessage = `Erreur serveur (${res.status}). Veuillez réessayer.`
         try {
           const errData = await res.json()
-          if (errData.detail) errorDetail = errData.detail
+          if (errData.detail) friendlyMessage = errData.detail
         } catch (e) {}
-        throw new Error(errorDetail)
+
+        // Afficher dans le toast (pas dans le chat)
+        setErrorToast({ message: friendlyMessage })
+        return // Ne pas ajouter de bulle d'erreur dans le chat
       }
 
       const data = await res.json()
-      setMessages((prev) => [
+      setMessages(prev => [
         ...prev,
         { role: 'assistant', content: data.answer, sources: data.sources },
       ])
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `[Erreur] ${err.message}`,
-          sources: [],
-        },
-      ])
+      // Erreur réseau (pas de connexion, backend éteint, etc.)
+      setErrorToast({
+        message: err.message.includes('fetch')
+          ? '🌐 Impossible de contacter le serveur. Vérifiez que le backend est bien démarré.'
+          : `Erreur : ${err.message}`
+      })
     } finally {
       setLoading(false)
     }
@@ -158,10 +210,10 @@ export default function ChatWindow() {
 
   return (
     <div className="flex w-full h-full relative">
-      {/* Sidebar mobile overlay */}
+      {/* Overlay mobile (ferme la sidebar en cliquant à côté) */}
       {sidebarOpen && (
-        <div 
-          className="md:hidden fixed inset-0 bg-black/20 z-20"
+        <div
+          className="md:hidden fixed inset-0 bg-black/30 z-20"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -173,11 +225,15 @@ export default function ChatWindow() {
       `}>
         <div className="p-4 flex items-center justify-between whitespace-nowrap overflow-hidden">
           <span className="font-semibold text-clinic-900">Historique</span>
-          <button onClick={() => setSidebarOpen(false)} className="text-clinic-500 hover:text-clinic-700 p-1">
-            <Menu size={20} />
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="text-clinic-500 hover:text-clinic-700 p-1"
+            aria-label="Fermer le menu"
+          >
+            <X size={20} />
           </button>
         </div>
-        
+
         <div className="p-3">
           <button
             onClick={startNewSession}
@@ -197,7 +253,9 @@ export default function ChatWindow() {
                 if (window.innerWidth < 768) setSidebarOpen(false)
               }}
               className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl text-sm transition-colors text-left overflow-hidden ${
-                activeSessionId === s.id ? 'bg-clinic-500 text-white' : 'hover:bg-clinic-50 text-clinic-700'
+                activeSessionId === s.id
+                  ? 'bg-clinic-500 text-white'
+                  : 'hover:bg-clinic-50 text-clinic-700'
               }`}
             >
               <MessageSquare size={16} className="shrink-0" />
@@ -237,18 +295,20 @@ export default function ChatWindow() {
         </div>
       </div>
 
-      {/* Chat Area */}
+      {/* Zone de chat principale */}
       <div className="flex-1 flex flex-col min-w-0 bg-clinic-50/50 relative">
-        {/* Floating Menu Button (when sidebar is closed) */}
+        {/* Bouton hamburger flottant (quand sidebar fermée) */}
         {!sidebarOpen && (
-          <button 
+          <button
             onClick={() => setSidebarOpen(true)}
-            className="absolute top-4 left-4 z-20 p-2 bg-white text-clinic-600 hover:bg-clinic-50 rounded-lg shadow-sm border border-clinic-100 transition-colors"
+            className="absolute top-4 left-4 z-20 p-2.5 bg-white text-clinic-600 hover:bg-clinic-50 rounded-xl shadow-sm border border-clinic-100 transition-colors"
+            aria-label="Ouvrir le menu"
           >
             <Menu size={20} />
           </button>
         )}
 
+        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center px-6">
@@ -256,14 +316,15 @@ export default function ChatWindow() {
                 <MessageSquare size={32} />
               </div>
               <p className="text-clinic-800 font-medium mb-6 text-lg max-w-sm">
-                Bonjour ! Je suis votre assistant de premier niveau. Posez-moi vos questions sur la prévention (paludisme, dengue), la nutrition ou l'orientation vers un centre de santé.
+                Bonjour ! Je suis votre assistant de santé. Posez-moi vos questions sur la prévention (paludisme, dengue), la nutrition ou l'orientation vers un centre de santé.
               </p>
               <div className="flex flex-col gap-3 w-full max-w-md">
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s}
                     onClick={() => sendMessage(s)}
-                    className="text-sm text-left px-5 py-3.5 rounded-2xl border border-clinic-200 bg-white hover:border-clinic-400 hover:shadow-sm transition-all text-clinic-700 font-medium"
+                    disabled={loading}
+                    className="text-sm text-left px-5 py-3.5 rounded-2xl border border-clinic-200 bg-white hover:border-clinic-400 hover:shadow-sm transition-all text-clinic-700 font-medium disabled:opacity-50"
                   >
                     {s}
                   </button>
@@ -280,7 +341,7 @@ export default function ChatWindow() {
             {loading && (
               <div className="flex justify-start">
                 <div className="bg-white border border-clinic-100 rounded-2xl rounded-bl-sm px-5 py-4 shadow-sm">
-                  <span className="flex gap-1.5">
+                  <span className="flex gap-1.5 items-center">
                     <span className="w-2 h-2 rounded-full bg-clinic-400 animate-bounce [animation-delay:-0.3s]" />
                     <span className="w-2 h-2 rounded-full bg-clinic-400 animate-bounce [animation-delay:-0.15s]" />
                     <span className="w-2 h-2 rounded-full bg-clinic-400 animate-bounce" />
@@ -292,37 +353,57 @@ export default function ChatWindow() {
           </div>
         </div>
 
-        <div className="bg-white border-t border-clinic-100 p-4">
-          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-3 relative items-center">
-            <button
-              type="button"
-              onClick={() => setUseWebSearch(!useWebSearch)}
-              title={useWebSearch ? "Recherche Web activée" : "Recherche Web désactivée"}
-              className={`p-3 rounded-full transition-colors border ${useWebSearch ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-clinic-50 border-clinic-200 text-clinic-400 hover:text-clinic-600'}`}
-            >
-              <Globe size={20} />
-            </button>
-            
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Saisir une question..."
-                className="w-full rounded-full border border-clinic-200 bg-clinic-50/50 pl-6 pr-24 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-clinic-500 focus:bg-white transition-all"
-              />
+        {/* Zone de saisie avec toast au-dessus */}
+        <div className="bg-white border-t border-clinic-100">
+          {/* Toast d'erreur — s'affiche juste au-dessus du champ de saisie */}
+          {errorToast && (
+            <ErrorToast
+              message={errorToast.message}
+              onClose={dismissToast}
+            />
+          )}
+
+          <div className="p-4">
+            <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-3 relative items-center">
               <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="absolute right-1.5 top-1.5 bottom-1.5 rounded-full bg-clinic-600 text-white px-5 text-sm font-medium hover:bg-clinic-700 disabled:opacity-40 transition-colors"
+                type="button"
+                onClick={() => setUseWebSearch(!useWebSearch)}
+                title={useWebSearch ? 'Recherche Web activée — cliquez pour désactiver' : 'Recherche Web désactivée — cliquez pour activer'}
+                className={`p-3 rounded-full transition-colors border shrink-0 ${
+                  useWebSearch
+                    ? 'bg-blue-50 border-blue-200 text-blue-600'
+                    : 'bg-clinic-50 border-clinic-200 text-clinic-400 hover:text-clinic-600'
+                }`}
               >
-                Envoyer
+                <Globe size={20} />
               </button>
-            </div>
-          </form>
-          <p className="text-center text-[11px] text-clinic-400 mt-3">
-            L'agent peut faire des erreurs. Vérifiez les informations importantes avec un professionnel de santé.
-          </p>
+
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Saisir une question..."
+                  disabled={loading}
+                  className="w-full rounded-full border border-clinic-200 bg-clinic-50/50 pl-6 pr-24 py-3.5 focus:outline-none focus:ring-2 focus:ring-clinic-500 focus:bg-white transition-all disabled:opacity-60"
+                  style={{ fontSize: '16px' }} /* Crucial : empêche le zoom iOS */
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck="false"
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="absolute right-1.5 top-1.5 bottom-1.5 rounded-full bg-clinic-600 text-white px-5 text-sm font-medium hover:bg-clinic-700 disabled:opacity-40 transition-colors"
+                >
+                  {loading ? '...' : 'Envoyer'}
+                </button>
+              </div>
+            </form>
+            <p className="text-center text-[11px] text-clinic-400 mt-3">
+              L'agent peut faire des erreurs. Vérifiez les informations importantes avec un professionnel de santé.
+            </p>
+          </div>
         </div>
       </div>
     </div>

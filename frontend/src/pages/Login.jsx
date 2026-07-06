@@ -50,7 +50,10 @@ export default function Login() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-clinic-200 focus:outline-none focus:ring-2 focus:ring-clinic-500"
+              style={{ fontSize: '16px' }}
               placeholder="Ex: docteur_ouedraogo"
+              autoComplete="username"
+              autoCapitalize="none"
             />
           </div>
           <div>
@@ -61,7 +64,9 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-clinic-200 focus:outline-none focus:ring-2 focus:ring-clinic-500"
+              style={{ fontSize: '16px' }}
               placeholder="••••••••"
+              autoComplete="current-password"
             />
           </div>
           <button

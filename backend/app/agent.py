@@ -5,14 +5,12 @@ d'utiliser lui-même selon la question posée :
     1. search_knowledge_base : cherche dans les documents officiels ingérés
        (PNLP, OMS, Ministère de la Santé...) via ChromaDB
     2. search_web : cherche des informations récentes sur le web via Tavily
-       (actualité sanitaire, alertes épidémiques récentes...)
 
 L'agent est volontairement cadré : orientation et prévention de premier
-niveau uniquement, jamais de diagnostic. S'il ne sait pas, il doit le dire
-et orienter vers un professionnel de santé.
+niveau uniquement, jamais de diagnostic.
 """
 from langchain_groq import ChatGroq
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain.agents import create_tool_calling_agent, AgentExecutor
@@ -27,28 +25,30 @@ from app.config import (
     CHROMA_PERSIST_DIR,
     COLLECTION_NAME,
     TOP_K_RESULTS,
-    GEMINI_API_KEY,
 )
 
-SYSTEM_PROMPT = """Cet agent est un assistant d'orientation médicale et de prévention pour le Burkina Faso.
+# Prompt système clair et explicite sur ce que l'assistant DOIT faire
+SYSTEM_PROMPT = """Tu es "Agent Santé BF", un assistant de santé publique pour le Burkina Faso.
 
-RÔLE DE L'AGENT :
-- Donner des conseils de premier niveau sur la prévention (paludisme, dengue, nutrition)
-- Orienter vers les centres de santé et pharmacies pertinents
-- Utiliser les outils à disposition pour s'appuyer sur des sources fiables
+TON DOMAINE (tu DOIS répondre à tout ce qui concerne) :
+- Toutes les maladies : paludisme (palu), dengue, choléra, méningite, tuberculose, VIH, malnutrition, diarrhée, etc.
+- Prévention, symptômes, traitements de premier niveau
+- Nutrition, alimentation, santé de l'enfant, santé maternelle
+- Orientation vers centres de santé, CSPS, CMA, CHR, CHU au Burkina Faso
+- Médicaments essentiels, vaccinations, hygiène
 
-LIMITES STRICTES ET ABSOLUES :
-- Si la question de l'utilisateur NE CONCERNE PAS la santé, la prévention, ou le domaine médical (par exemple: sport, politique, mathématiques, informatique, etc.), tu dois refuser poliment d'y répondre en précisant que ton domaine est limité à la santé.
-- Ne JAMAIS poser de diagnostic médical.
-- Ne JAMAIS remplacer une consultation médicale réelle.
-- Pour toute urgence médicale ou symptôme précis, orienter systématiquement vers un professionnel de santé ou un centre de santé.
+RÈGLES STRICTES :
+1. Si la question concerne la santé (maladies, symptômes, prévention, nutrition, médicaments) → RÉPONDS TOUJOURS.
+2. Si la question est clairement hors santé (maths, politique, sport, cuisine...) → refuse poliment.
+3. Ne JAMAIS poser de diagnostic précis. Ne JAMAIS remplacer un médecin.
+4. Pour toute urgence : orienter vers un professionnel ou un centre de santé.
+5. Répondre en français, de façon claire, simple et bienveillante.
+6. Citer toujours les sources utilisées (web ou documents internes).
 
-MÉTHODOLOGIE :
-1. Vérifie toujours si la question concerne la santé. Si ce n'est pas le cas, refuse poliment (hors périmètre).
-2. Si l'outil de recherche Web (search_web) est activé et à ta disposition, tu DOIS l'utiliser en priorité pour chercher en ligne et tu DOIS TOUJOURS donner les sources web dans ta réponse.
-3. Si la recherche Web n'est pas activée, cherche la réponse dans les documents locaux via search_knowledge_base.
-4. Si aucune information n'est trouvée via les outils, utilise tes propres connaissances médicales et générales pour répondre.
-5. Répondre en français, de façon claire et bienveillante, et cite TOUJOURS tes sources (Web ou Documents).
+MÉTHODE :
+- Si search_web est disponible : l'utiliser en priorité.
+- Sinon : utiliser search_knowledge_base.
+- Si aucun outil ne donne de résultat : répondre avec tes connaissances médicales générales.
 """
 
 
@@ -57,18 +57,37 @@ _retriever = None
 def _load_retriever():
     global _retriever
     if _retriever is None:
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model=EMBEDDING_MODEL,
-            google_api_key=GEMINI_API_KEY
+        import shutil
+        print(f"[INFO] Chargement du modèle d'embeddings local : {EMBEDDING_MODEL}...")
+        embeddings = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL,
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
         )
-        vector_store = Chroma(
-            collection_name=COLLECTION_NAME,
-            embedding_function=embeddings,
-            persist_directory=str(CHROMA_PERSIST_DIR),
-        )
+        print("[INFO] Embeddings locaux (HuggingFace) chargés avec succès.")
+
+        def _create_store():
+            return Chroma(
+                collection_name=COLLECTION_NAME,
+                embedding_function=embeddings,
+                persist_directory=str(CHROMA_PERSIST_DIR),
+            )
+
+        vector_store = _create_store()
+
+        # Vérification de compatibilité de dimension — auto-correction
+        try:
+            vector_store.similarity_search("test", k=1)
+        except Exception as e:
+            if "dimension" in str(e).lower() or "dimensionality" in str(e).lower():
+                print("[AVERTISSEMENT] Base vectorielle incompatible (ancien modèle). Réinitialisation...")
+                shutil.rmtree(str(CHROMA_PERSIST_DIR), ignore_errors=True)
+                vector_store = _create_store()
+                print("[INFO] Base vectorielle réinitialisée avec succès.")
+
         _retriever = vector_store.as_retriever(
             search_type="mmr",
-            search_kwargs={"k": TOP_K_RESULTS, "fetch_k": 20}
+            search_kwargs={"k": TOP_K_RESULTS, "fetch_k": 10}
         )
     return _retriever
 
@@ -82,33 +101,36 @@ def build_agent_executor(use_web_search: bool = True) -> AgentExecutor:
     def search_knowledge_base(query: str) -> str:
         """Cherche dans la base documentaire officielle (OMS, PNLP, Ministère de la Santé).
         À utiliser pour retrouver des recommandations médicales officielles issues de nos documents locaux."""
-        docs = retriever.invoke(query)
-        if not docs:
-            return "Aucun résultat trouvé dans la base documentaire interne."
-        results = []
-        for doc in docs:
-            source = doc.metadata.get("source", "document inconnu")
-            results.append(f"[Source interne : {source}]\n{doc.page_content}")
-        return "\n\n---\n\n".join(results)
-
-    tavily_tool = TavilySearchResults(
-        max_results=4,
-        api_key=TAVILY_API_KEY,
-        description=(
-            "Cherche sur le web mondial en direct. "
-            "Si cet outil est disponible, tu DOIS l'utiliser en ABSOLUE PRIORITÉ pour "
-            "aller chercher l'information sur internet avant de regarder la base documentaire locale."
-        ),
-    )
+        try:
+            docs = retriever.invoke(query)
+            if not docs:
+                return "Aucun résultat trouvé dans la base documentaire interne. Utilise tes connaissances générales."
+            results = []
+            for doc in docs:
+                source = doc.metadata.get("source", "document inconnu")
+                results.append(f"[Source interne : {source}]\n{doc.page_content}")
+            return "\n\n---\n\n".join(results)
+        except Exception as e:
+            print(f"[AVERTISSEMENT] Recherche documentaire échouée : {e}")
+            return "Base documentaire indisponible. Réponds avec tes connaissances médicales générales."
 
     tools = [search_knowledge_base]
-    if use_web_search:
+
+    if use_web_search and TAVILY_API_KEY:
+        tavily_tool = TavilySearchResults(
+            max_results=3,
+            api_key=TAVILY_API_KEY,
+            description=(
+                "Cherche sur le web mondial en direct. "
+                "Utiliser en PRIORITÉ pour trouver des informations récentes sur la santé."
+            ),
+        )
         tools.append(tavily_tool)
 
     llm = ChatGroq(
         api_key=GROQ_API_KEY,
         model=GROQ_MODEL,
-        temperature=0.2,
+        temperature=0.1,
     )
 
     prompt = ChatPromptTemplate.from_messages([
@@ -124,6 +146,6 @@ def build_agent_executor(use_web_search: bool = True) -> AgentExecutor:
         tools=tools,
         verbose=True,
         return_intermediate_steps=True,
-        max_iterations=4,
+        max_iterations=2,
     )
     return executor
