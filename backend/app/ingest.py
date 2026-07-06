@@ -11,7 +11,7 @@ from pathlib import Path
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_chroma import Chroma
 
 from app.config import (
@@ -21,6 +21,7 @@ from app.config import (
     CHUNK_SIZE,
     CHUNK_OVERLAP,
     COLLECTION_NAME,
+    GEMINI_API_KEY,
 )
 
 
@@ -59,11 +60,10 @@ def split_documents(documents):
 
 def build_vector_store(chunks):
     """Génère les embeddings via Gemini API et les sauvegarde dans ChromaDB."""
-    print(f"[INFO] Utilisation du modèle d'embeddings local : {EMBEDDING_MODEL}")
-    embeddings = HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL,
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
+    print(f"[INFO] Utilisation du modèle d'embeddings Gemini : {EMBEDDING_MODEL}")
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model=EMBEDDING_MODEL,
+        google_api_key=GEMINI_API_KEY,
     )
 
     print("[INFO] Création de la base vectorielle ChromaDB...")
@@ -73,16 +73,30 @@ def build_vector_store(chunks):
         persist_directory=str(CHROMA_PERSIST_DIR),
     )
 
-    # Insertion par lots pour respecter la limite API gratuite
+    # Insertion par lots avec gestion robuste du quota (429)
     import time
-    batch_size = 50
+    batch_size = 80
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i:i + batch_size]
-        print(f"[INFO] Insertion lot {i // batch_size + 1}/{(len(chunks) - 1) // batch_size + 1}...")
-        vector_store.add_documents(batch)
+        print(f"[INFO] Insertion lot {i // batch_size + 1}/{(len(chunks) - 1) // batch_size + 1} (Taille: {len(batch)})...")
+        
+        for attempt in range(5):
+            try:
+                vector_store.add_documents(batch)
+                break
+            except Exception as e:
+                if "429" in str(e) or "Quota" in str(e) or "ResourceExhausted" in str(e):
+                    print(f"[ATTENTION] Quota API dépassé (429). Pause de 25 secondes avant tentative {attempt + 2}/5...")
+                    time.sleep(25)
+                else:
+                    raise e
+        else:
+            print("[ERREUR] Impossible d'insérer le lot après 5 tentatives.")
+            sys.exit(1)
+            
         if i + batch_size < len(chunks):
-            print("[ATTENTE] Pause de 15 secondes pour l'API Gemini...")
-            time.sleep(15)
+            print("[ATTENTE] Pause préventive de 10 secondes...")
+            time.sleep(10)
 
     print(f"[SUCCES] Base vectorielle sauvegardée dans {CHROMA_PERSIST_DIR}")
     return vector_store

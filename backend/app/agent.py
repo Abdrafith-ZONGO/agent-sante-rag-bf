@@ -10,7 +10,7 @@ L'agent est volontairement cadré : orientation et prévention de premier
 niveau uniquement, jamais de diagnostic.
 """
 from langchain_groq import ChatGroq
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain.agents import create_tool_calling_agent, AgentExecutor
@@ -25,6 +25,7 @@ from app.config import (
     CHROMA_PERSIST_DIR,
     COLLECTION_NAME,
     TOP_K_RESULTS,
+    GEMINI_API_KEY,
 )
 
 # Prompt système clair et explicite sur ce que l'assistant DOIT faire
@@ -58,13 +59,12 @@ def _load_retriever():
     global _retriever
     if _retriever is None:
         import shutil
-        print(f"[INFO] Chargement du modèle d'embeddings local : {EMBEDDING_MODEL}...")
-        embeddings = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL,
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True},
+        print(f"[INFO] Chargement du modèle d'embeddings Gemini : {EMBEDDING_MODEL}...")
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model=EMBEDDING_MODEL,
+            google_api_key=GEMINI_API_KEY,
         )
-        print("[INFO] Embeddings locaux (HuggingFace) chargés avec succès.")
+        print("[INFO] Embeddings Gemini configurés avec succès.")
 
         def _create_store():
             return Chroma(
@@ -80,7 +80,7 @@ def _load_retriever():
             vector_store.similarity_search("test", k=1)
         except Exception as e:
             if "dimension" in str(e).lower() or "dimensionality" in str(e).lower():
-                print("[AVERTISSEMENT] Base vectorielle incompatible (ancien modèle). Réinitialisation...")
+                print("[AVERTISSEMENT] Base vectorielle incompatible (dimension différente). Réinitialisation...")
                 shutil.rmtree(str(CHROMA_PERSIST_DIR), ignore_errors=True)
                 vector_store = _create_store()
                 print("[INFO] Base vectorielle réinitialisée avec succès.")
