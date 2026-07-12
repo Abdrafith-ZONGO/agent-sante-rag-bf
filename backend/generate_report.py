@@ -102,15 +102,40 @@ def add_code_styled(doc, text):
     r.font.color.rgb = RGBColor(80, 80, 80)
     return p
 
+def add_hyperlink(paragraph, url, text, color="0000FF", underline=True):
+    """Ajoute un lien hypertexte cliquable dans un paragraphe Word."""
+    part = paragraph.part
+    r_id = part.relate_to(url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True)
+    hyperlink = parse_xml(f'<w:hyperlink xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="{r_id}"/>')
+    new_run = parse_xml(f'<w:r {nsdecls("w")}/>')
+    text_node = parse_xml(f'<w:t {nsdecls("w")}>{text}</w:t>')
+    new_run.append(text_node)
+    
+    rPr = parse_xml(f'<w:rPr {nsdecls("w")}/>')
+    if color:
+        c = parse_xml(f'<w:color {nsdecls("w")} w:val="{color}"/>')
+        rPr.append(c)
+    if underline:
+        u = parse_xml(f'<w:u {nsdecls("w")} w:val="single"/>')
+        rPr.append(u)
+    f = parse_xml(f'<w:rFonts {nsdecls("w")} w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>')
+    rPr.append(f)
+    sz = parse_xml(f'<w:sz {nsdecls("w")} w:val="22"/>') # 11pt = 22 half-points
+    rPr.append(sz)
+    
+    new_run.append(rPr)
+    hyperlink.append(new_run)
+    paragraph._p.append(hyperlink)
+    return hyperlink
+
 def add_screenshot_box(doc, number, filename, description):
-    """Crée un encadré stylé sous forme de tableau pour insérer une capture d'écran."""
+    """Crée un encadré de capture d'écran dans le document Word."""
     table = doc.add_table(rows=2, cols=1)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.autofit = False
     table.columns[0].width = Inches(5.8)
-    set_table_borders(table, "B2D8D8", "8") # Bordure verte/bleue clinique
+    set_table_borders(table, "B2D8D8", "8")
     
-    # Cellule 1 : Emplacement Image
     cell_img = table.rows[0].cells[0]
     set_cell_background(cell_img, "F4FBFB")
     set_cell_margins(cell_img, top=200, bottom=200, left=200, right=200)
@@ -122,7 +147,6 @@ def add_screenshot_box(doc, number, filename, description):
     r_img.font.bold = True
     r_img.font.color.rgb = RGBColor(0, 128, 128)
     
-    # Cellule 2 : Légende
     cell_leg = table.rows[1].cells[0]
     set_cell_background(cell_leg, "E0F2F1")
     set_cell_margins(cell_leg, top=100, bottom=100, left=150, right=150)
@@ -140,7 +164,6 @@ def add_screenshot_box(doc, number, filename, description):
 def build_complete_technical_report():
     doc = Document()
     
-    # Configuration des marges (2.54 cm partout)
     for section in doc.sections:
         section.top_margin = Inches(1)
         section.bottom_margin = Inches(1)
@@ -214,13 +237,20 @@ def build_complete_technical_report():
         
     p_links = doc.add_paragraph()
     p_links.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
     r_git_label = p_links.add_run("Dépôt GitHub du Projet : ")
     r_git_label.font.bold = True
-    p_links.add_run("https://github.com/Abdrafith-ZONGO/agent-sante-rag-bf\n")
-    r_dep_label = p_links.add_run("Lien de Déploiement : ")
+    add_hyperlink(p_links, "https://github.com/Abdrafith-ZONGO/agent-sante-rag-bf", "https://github.com/Abdrafith-ZONGO/agent-sante-rag-bf")
+    p_links.add_run("\n")
+    
+    r_dep_label = p_links.add_run("Application en ligne (Vercel) : ")
     r_dep_label.font.bold = True
-    p_links.add_run("https://agent-sante-bf.onrender.com (Backend API)\n"
-                    "https://agent-sante-bf-ui.onrender.com (Frontend React UI)")
+    add_hyperlink(p_links, "https://agent-sante-rag-bf.vercel.app/", "https://agent-sante-rag-bf.vercel.app/")
+    p_links.add_run("\n")
+    
+    r_api_label = p_links.add_run("Serveur API (Render) : ")
+    r_api_label.font.bold = True
+    add_hyperlink(p_links, "https://agent-sante-rag-bf.onrender.com", "https://agent-sante-rag-bf.onrender.com")
     
     for _ in range(2):
         doc.add_paragraph()
@@ -268,7 +298,7 @@ def build_complete_technical_report():
         "   6.2. Analyse des Résultats Expérimentaux ...................................................................................... 18\n"
         "7. GUIDE D'EXÉCUTION EN LOCAL ET DÉPLOIEMENT EN LIGNE ...................................................... 20\n"
         "   7.1. Guide d'Exécution en Local (Pas à Pas) ...................................................................................... 20\n"
-        "   7.2. Procédure de Déploiement en Ligne (Render) ........................................................................... 21\n"
+        "   7.2. Configuration Réelle du Déploiement en Ligne (Vercel & Render) ............................................. 21\n"
         "8. DIFFICULTÉS RENCONTRÉES ET SOLUTIONS APPORTÉES ...................................................... 22\n"
         "   8.1. Limitation des Quotas d'APIs Gratuites (Erreurs 429) .................................................................. 22\n"
         "   8.2. Volatilité de SQLite sur Render (Perte de Sessions 401) .............................................................. 22\n"
@@ -287,7 +317,7 @@ def build_complete_technical_report():
     add_paragraph_styled(doc,
         "L'accès rapide, rigoureux et de premier niveau à l'information sanitaire représente un pilier majeur de la santé publique moderne. "
         "Au Burkina Faso, pays confronté à des épidémies saisonnières récurrentes telles que le paludisme et la dengue, la diffusion d'informations "
-        "de prévention de premier niveau de manière accessible est cruciale. Cependant, les professionnels de la santé dans les structures "
+        "de prévention de premier niveau de manière accessible est critique. Cependant, les professionnels de la santé dans les structures "
         "de proximité (CSPS, CMA) sont souvent submergés, et la population se tourne fréquemment vers des canaux d'information informels, "
         "vecteurs de désinformation ou de conseils médicaux erronés.\n\n"
         "L'avènement des grands modèles de langage (LLM) offre une opportunité technologique majeure pour concevoir des assistants d'orientation "
@@ -303,10 +333,9 @@ def build_complete_technical_report():
     )
     
     # ---------------------------------------------------------------------------
-    # 1. ARCHITECTURE TECHNIQUE DU SYSTEME ET SCHÉMA DE FLUX
+    # 1. ARCHITECTURE TECHNIQUE DU SYSTEME AND FLOW DIAGRAM
     # ---------------------------------------------------------------------------
     add_heading_styled(doc, "1. ARCHITECTURE TECHNIQUE DU SYSTEME ET SCHÉMA DE FLUX", level=1)
-    
     add_heading_styled(doc, "1.1. Architecture Globale Découlée", level=2)
     add_paragraph_styled(doc,
         "L'Agent Santé BF adopte une architecture client-serveur découplée afin d'assurer de hautes performances, une sécurité "
@@ -381,7 +410,6 @@ def build_complete_technical_report():
     # 2. ARBORESCENCE DU PROJET AND FILE ROLES
     # ---------------------------------------------------------------------------
     add_heading_styled(doc, "2. ARBORESCENCE DU PROJET ET RÔLE DE CHAQUE COMPOSANT", level=1)
-    
     add_heading_styled(doc, "2.1. Structure du Répertoire Projet", level=2)
     table_tree = doc.add_table(rows=1, cols=1)
     table_tree.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -574,10 +602,22 @@ def build_complete_technical_report():
         "npm run dev"
     )
 
-    add_heading_styled(doc, "7.2. Procédure de Déploiement en Ligne (Render)", level=2)
-    add_paragraph_styled(doc,
-        "Déploiement du Backend (FastAPI Web Service) : Build Command = `pip install -r requirements.txt`, Start Command = `uvicorn app.main:app --host 0.0.0.0 --port 10000`. Configurer les clés API.\n"
-        "Déploiement du Frontend (React Static Site) : Build Command = `npm run build`, Publish Directory = `dist`."
+    add_heading_styled(doc, "7.2. Configuration Réelle du Déploiement en Ligne (Vercel & Render)", level=2)
+    p_dep_exp = doc.add_paragraph()
+    p_dep_exp.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_dep_exp.add_run(
+        "L'application est déployée en production de manière stable, en utilisant deux plateformes cloud complémentaires :\n\n"
+        "1. **Le Frontend React** : Hébergé sur **Vercel** à l'adresse de production unique suivante : "
+    )
+    add_hyperlink(p_dep_exp, "https://agent-sante-rag-bf.vercel.app/", "https://agent-sante-rag-bf.vercel.app/")
+    p_dep_exp.add_run(
+        "\nLe déploiement est relié au dépôt GitHub. Vercel reconstruit automatiquement le site statique à chaque push sur la branche principale.\n\n"
+        "2. **Le Backend FastAPI** : Hébergé sur **Render.com** (Web Service gratuit) à l'adresse : "
+    )
+    add_hyperlink(p_dep_exp, "https://agent-sante-rag-bf.onrender.com", "https://agent-sante-rag-bf.onrender.com")
+    p_dep_exp.add_run(
+        "\nLe serveur backend exécute FastAPI de manière asynchrone et contient la base de données relationnelle SQLite temporaire ainsi que ChromaDB. "
+        "Les clés d'API (Groq, Gemini, Tavily) et la clé secrète JWT y sont configurées comme variables d'environnement sécurisées."
     )
 
     doc.add_page_break()
@@ -586,7 +626,6 @@ def build_complete_technical_report():
     # 8. DIFFICULTÉS RENCONTRÉES ET SOLUTIONS APPORTÉES
     # ---------------------------------------------------------------------------
     add_heading_styled(doc, "8. DIFFICULTÉS RENCONTRÉES ET SOLUTIONS APPORTÉES", level=1)
-    
     add_heading_styled(doc, "8.1. Limitation des Quotas d'APIs Gratuites (Erreurs 429)", level=2)
     add_paragraph_styled(doc, "Les requêtes d'embeddings sur de gros PDF (11.5 Mo) saturaient le quota gratuit de Gemini (15 req/min). Solution : envoi par lots de 80 avec 10s de pause préventive et intercepteur suspendant l'ingestion pendant 25s lors d'une erreur 429.")
     
@@ -609,10 +648,9 @@ def build_complete_technical_report():
     # ---------------------------------------------------------------------------
     add_heading_styled(doc, "CONCLUSION", level=1)
     add_paragraph_styled(doc,
-        "Le projet Agent Santé BF démontre l'efficacité du RAG pour concevoir un assistant d'orientation sémantique et de prévention au Burkina Faso. L'évaluation automatisée a validé la robustesse du système avec 100% de pertinence et de refus corrects. La migration future vers PostgreSQL permettra de finaliser une architecture robuste de production."
+        "Le projet Agent Santé BF démontre l'efficacité du RAG pour concevoir un assistant d'orientation sémantique et de prévention au Burkina Faso. L'évaluation automatisée a validé la robustesse du système avec 100% de pertinence et de refus corrects. La migration future vers PostgreSQL permettra de finaliser une architecture de production managée."
     )
     
-    # Enregistrement
     output_path = "c:\\Users\\HP\\Desktop\\IFOAD\\M1\\Data sciences\\Projet\\projet-sante-rag\\Rapport_Technique_Agent_Sante_BF.docx"
     try:
         doc.save(output_path)
@@ -625,7 +663,6 @@ def build_complete_technical_report():
 def build_complete_user_guide():
     doc = Document()
     
-    # Configuration des marges (2.54 cm partout)
     for section in doc.sections:
         section.top_margin = Inches(1)
         section.bottom_margin = Inches(1)
@@ -660,7 +697,7 @@ def build_complete_user_guide():
                               "INTERFACE WEB DE L'AGENT SANTÉ BF\n")
     r_title.font.size = Pt(15)
     r_title.font.bold = True
-    r_title.font.color.rgb = RGBColor(0, 128, 128) # Vert clinique/teal
+    r_title.font.color.rgb = RGBColor(0, 128, 128)
     
     p_sub = doc.add_paragraph()
     p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -718,15 +755,19 @@ def build_complete_user_guide():
     )
     
     add_heading_styled(doc, "1. INCRIPTION SUR LA PLATEFORME (REGISTER)", level=1)
-    add_paragraph_styled(doc,
-        "Avant de pouvoir interagir avec l'assistant de santé, vous devez vous enregistrer pour créer un compte utilisateur local sécurisé :\n"
-        "1. Ouvrez l'adresse de l'application dans votre navigateur.\n"
-        "2. Si vous n'êtes pas encore connecté, le système vous redirige automatiquement vers l'écran de connexion. "
-        "Cliquez sur le lien bleu **« S'inscrire »** situé en bas du formulaire.\n"
-        "3. Remplissez les deux champs requis : un nom d'utilisateur (exemple : `dr_ouedraogo` ou votre prénom) et un mot de passe.\n"
-        "4. Cliquez sur le bouton vert **« S'inscrire »**.\n"
-        "5. Une fois l'enregistrement validé par le backend, l'application vous redirige automatiquement vers l'écran de connexion."
-    )
+    
+    p_reg = doc.add_paragraph()
+    p_reg.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_reg.paragraph_format.line_spacing = 1.15
+    p_reg.paragraph_format.space_after = Pt(8)
+    p_reg.add_run("Avant de pouvoir interagir avec l'assistant de santé, vous devez vous enregistrer pour créer un compte utilisateur local sécurisé :\n"
+                  "1. Ouvrez l'adresse de l'application en ligne : ")
+    add_hyperlink(p_reg, "https://agent-sante-rag-bf.vercel.app/", "https://agent-sante-rag-bf.vercel.app/")
+    p_reg.add_run("\n2. Si vous n'êtes pas encore connecté, le système vous redirige automatiquement vers l'écran de connexion. "
+                  "Cliquez sur le lien de bascule « S'inscrire » situé en bas du formulaire.\n"
+                  "3. Remplissez les deux champs requis : un nom d'utilisateur (exemple : dr_ouedraogo ou votre prénom) et un mot de passe.\n"
+                  "4. Cliquez sur le bouton vert « S'inscrire ».\n"
+                  "5. Une fois l'inscription validée par le backend, l'application vous redirige vers la connexion.")
     
     add_screenshot_box(doc, 1, "ecran_inscription.png", "L'interface blanche et verte d'inscription avec les champs Nom d'utilisateur et Mot de passe.")
     
@@ -747,12 +788,12 @@ def build_complete_user_guide():
     add_heading_styled(doc, "3. DÉCOUVERTE DE L'INTERFACE DE DISCUSSION", level=1)
     add_paragraph_styled(doc,
         "L'interface de l'Agent Santé BF a été conçue pour être claire, moderne et intuitive, arborant un style de clinique médicale bleue et verte. Elle s'adapte automatiquement sur ordinateur et sur smartphone. L'écran se découpe en trois zones distinctes :\n\n"
-        "• **La barre latérale (Sidebar) à gauche** : Elle contient le bouton "+ "« Nouvelle conversation »" + " pour ouvrir une session vierge, la liste de vos anciens fils de discussion enregistrés en base SQLite pour charger vos historiques, et votre profil utilisateur tout en bas.\n"
+        "• **La barre latérale (Sidebar) à gauche** : Elle contient le bouton « Nouvelle conversation » pour ouvrir une session vierge, la liste de vos anciens fils de discussion enregistrés en base SQLite pour charger vos historiques, et votre profil utilisateur tout en bas.\n"
         "• **La zone de chat au centre** : Elle affiche les bulles de messages échangés. Si la conversation est vide, le système vous propose trois suggestions de questions de santé publique burkinabè fréquentes pour vous guider.\n"
         "• **La boîte de saisie en bas** : Elle comporte l'icône de globe terrestre pour activer la recherche sur internet, le champ d'écriture du message et le bouton d'envoi."
     )
     
-    add_screenshot_box(doc, 3, "interface_principale.png", "La vue globale de la fenêtre de discussion avec les suggestions de départ et la sidebar d'historique.")
+    add_screenshot_box(doc, 3, "interface_principale.png", "La vue globale de la fenêtre de discussion avec les suggestions de départ et la sidebar d'historique à gauche.")
     
     doc.add_page_break()
     
@@ -760,8 +801,8 @@ def build_complete_user_guide():
     add_paragraph_styled(doc,
         "L'assistant propose deux modes de fonctionnement que vous pouvez activer selon la nature de votre question :\n\n"
         "• **Mode RAG Documentaire Classique (Local)** : Écrivez simplement votre question (ex: « Quels sont les modes de prévention du paludisme ? ») et envoyez. "
-        "L'IA interroge la base documentaire interne et affiche des badges bleus contenant le nom des documents PDF sources en bas de sa réponse (ex: `[Source interne : guide_sante_burkina.pdf]`). Vous pouvez cliquer sur ces badges pour ouvrir le fichier PDF officiel d'origine.\n"
-        "• **Mode Recherche Web (En direct)** : Pour des actualités épidémiologiques très récentes au Burkina Faso, cliquez sur l'icône de **globe terrestre** à gauche du champ d'écriture (l'icône devient bleue). Envoyez votre question (ex: « Dernières actualités du vaccin antipaludique au Burkina »). L'agent interroge internet via Tavily et affiche des badges de sources web cliquables (ex: `sante.lefigaro.fr`). Cliquez à nouveau sur le globe pour le désactiver."
+        "L'IA interroge la base documentaire interne et affiche des badges bleus contenant le nom des documents PDF sources en bas de sa réponse (ex: [Source interne : guide_sante_burkina.pdf]). Vous pouvez cliquer sur ces badges pour ouvrir le fichier PDF officiel d'origine.\n"
+        "• **Mode Recherche Web (En direct)** : Pour des actualités épidémiologiques très récentes au Burkina Faso, cliquez sur l'icône de **globe terrestre** à gauche du champ d'écriture (l'icône devient bleue). Envoyez votre question (ex: « Dernières actualités du vaccin antipaludique au Burkina »). L'agent interroge internet via Tavily et affiche des badges de sources web cliquables (ex: sante.lefigaro.fr). Cliquez à nouveau sur le globe pour le désactiver."
     )
     
     add_heading_styled(doc, "5. DÉCONNEXION SÉCURISÉE", level=1)
@@ -804,7 +845,6 @@ def build_complete_user_guide():
         "• **Comment le résoudre** : L'interface a été conçue pour bloquer ce comportement en forçant des polices d'écriture de 16px sur les mobiles. Si le problème survient sur un vieil appareil, effectuez un pincement à deux doigts (pinch-to-zoom) sur l'écran pour dézoomer et stabiliser le rendu."
     )
     
-    # Enregistrement
     output_path = "c:\\Users\\HP\\Desktop\\IFOAD\\M1\\Data sciences\\Projet\\projet-sante-rag\\Guide_Utilisateur_Agent_Sante_BF.docx"
     try:
         doc.save(output_path)
