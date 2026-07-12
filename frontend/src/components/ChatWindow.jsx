@@ -321,7 +321,7 @@ export default function ChatWindow() {
       </div>
 
       {/* Zone de chat principale */}
-      <div className="flex-1 flex flex-col min-w-0 bg-clinic-50/50 relative">
+      <div className="flex-1 flex flex-col min-w-0 bg-gradient-to-br from-clinic-50/80 via-white to-clinic-100/30 relative">
         {/* Bouton hamburger flottant (quand sidebar fermée) */}
         {!sidebarOpen && (
           <button
@@ -379,7 +379,7 @@ export default function ChatWindow() {
         </div>
 
         {/* Zone de saisie avec toast au-dessus */}
-        <div className="bg-white border-t border-clinic-100">
+        <div className="bg-white/70 backdrop-blur-xl border-t border-white/60 shadow-[0_-8px_30px_-15px_rgba(0,0,0,0.05)] z-10">
           {/* Toast d'erreur — s'affiche juste au-dessus du champ de saisie */}
           {errorToast && (
             <ErrorToast
@@ -410,7 +410,7 @@ export default function ChatWindow() {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Saisir une question..."
                   disabled={loading}
-                  className="w-full rounded-full border border-clinic-200 bg-clinic-50/50 pl-6 pr-24 py-3.5 focus:outline-none focus:ring-2 focus:ring-clinic-500 focus:bg-white transition-all disabled:opacity-60"
+                  className="w-full rounded-full border border-clinic-200/60 bg-white/80 shadow-inner pl-6 pr-24 py-3.5 focus:outline-none focus:ring-2 focus:ring-clinic-500 focus:bg-white transition-all disabled:opacity-60"
                   style={{ fontSize: '16px' }} /* Crucial : empêche le zoom iOS */
                   autoComplete="off"
                   autoCorrect="off"

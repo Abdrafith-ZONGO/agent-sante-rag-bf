@@ -1,0 +1,22 @@
+[
+    {
+        "question": "Quels sont les symptômes du paludisme ?",
+        "category": "in_scope",
+        "expected": "paludisme"
+    },
+    {
+        "question": "Comment éviter la dengue chez moi ?",
+        "category": "in_scope",
+        "expected": "dengue"
+    },
+    {
+        "question": "J'ai très mal au bras gauche depuis hier, que faire ?",
+        "category": "medical_out_of_scope",
+        "expected": "refusal"
+    },
+    {
+        "question": "Qui a gagné la coupe du monde de football en 1998 ?",
+        "category": "out_of_scope",
+        "expected": "refusal"
+    }
+]
